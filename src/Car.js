@@ -2,23 +2,22 @@ import * as THREE from 'three'
 import {Controls} from './controls.js'
 
 import {GLTFLoader} from 'three/examples/jsm/loaders/GLTFLoader'
-import {DRACOLoader} from 'three/examples/jsm/loaders/DracoLoader'
+import { DRACOLoader } from 'three/examples/jsm/loaders/DracoLoader'
 
 export class Car {
-    constructor(Ammo, scene, physicsWorld) {
+    constructor (Ammo, scene, physicsWorld) {
         this.ammoClone = Ammo
         this.scene = scene
         this.rigidBodies = []
         this.meshes = []
         this.physicsWorld = physicsWorld
-        this.tempTransform = new Ammo.btTransform()
 
         this.actions = {};
         this.keysActions = {
-            "KeyW": 'acceleration',
-            "KeyS": 'braking',
-            "KeyA": 'left',
-            "KeyD": 'right'
+            "KeyW":'acceleration',
+            "KeyS":'braking',
+            "KeyA":'left',
+            "KeyD":'right'
         };
 
         this.controlsCar = new Controls();
@@ -55,13 +54,12 @@ export class Car {
 
         let t = new THREE.CylinderGeometry(radius, radius, width, 24, 1);
         t.rotateZ(Math.PI / 2);
-        let mesh = new THREE.Mesh(t, new THREE.MeshPhongMaterial({color: 'blue'}));
-        mesh.add(new THREE.Mesh(new THREE.BoxGeometry(width * 1.5, radius * 1.75, radius * .25, 1, 1, 1), new THREE.MeshPhongMaterial({color: 'red'})));
+        let mesh = new THREE.Mesh(t, new THREE.MeshPhongMaterial({ color: 'blue' }));
+        mesh.add(new THREE.Mesh(new THREE.BoxGeometry(width * 1.5, radius * 1.75, radius*.25, 1, 1, 1), new THREE.MeshPhongMaterial({ color: 'red' })));
         this.scene.add(mesh);
         this.wheelMeshes[index] = mesh;
     }
-
-    createGLTF(Ammo = this.ammoClone) {
+    createGLTF(Ammo = this.ammoClone){
         let pos = {x: 0, y: 4, z: 1},
             quat = {x: 0, y: 0, z: 0, w: 1},
             mass = 1
@@ -75,108 +73,11 @@ export class Car {
             const material = gltf.scene.children[0].material
             this.createInstances(geometry, material, Ammo)
 
+
         })
 
     }
-
-    createInstances(geometry, material, Ammo) {
-        const mesh = new THREE.Mesh(geometry, material)
-
-
-        mesh.castShadow = true
-
-
-        this.scene.add(mesh)
-
-        let triangle, triangle_mesh = new Ammo.btTriangleMesh()
-        //declare triangles position vectors
-        let vectA = new Ammo.btVector3(0, 0, 0)
-        let vectB = new Ammo.btVector3(0, 0, 0)
-        let vectC = new Ammo.btVector3(0, 0, 0)
-
-        //retrieve vertices positions from object
-        let verticesPos = geometry.getAttribute('position').array
-        let triangles = []
-        for (let i = 0; i < verticesPos.length; i += 3) {
-            triangles.push({
-                x: verticesPos[i],
-                y: verticesPos[i + 1],
-                z: verticesPos[i + 2]
-            })
-        }
-
-        for (let i = 0; i < triangles.length - 3; i += 3) {
-
-            vectA.setX(triangles[i].x)
-            vectA.setY(triangles[i].y)
-            vectA.setZ(triangles[i].z)
-
-            vectB.setX(triangles[i + 1].x)
-            vectB.setY(triangles[i + 1].y)
-            vectB.setZ(triangles[i + 1].z)
-
-            vectC.setX(triangles[i + 2].x)
-            vectC.setY(triangles[i + 2].y)
-            vectC.setZ(triangles[i + 2].z)
-
-            triangle_mesh.addTriangle(vectA, vectB, vectC, true)
-        }
-
-        Ammo.destroy(vectA)
-        Ammo.destroy(vectB)
-        Ammo.destroy(vectC)
-
-        let shape = new Ammo.btConvexTriangleMeshShape(triangle_mesh, true)
-
-        geometry.verticesNeedUpdate = true
-
-        this.handleInstancedMesh(mesh, shape, 1, Ammo)
-    }
-
-    handleInstancedMesh(mesh, shape, mass, Ammo) {
-
-        const bodies = []
-
-
-        const transform = new Ammo.btTransform()
-
-        const motionState = new Ammo.btDefaultMotionState(transform)
-
-        const localInertia = new Ammo.btVector3(0, 0, 0)
-        shape.calculateLocalInertia(mass, localInertia)
-
-        const rbInfo = new Ammo.btRigidBodyConstructionInfo(mass, motionState, shape, localInertia)
-        const body = new Ammo.btRigidBody(rbInfo)
-        this.physicsWorld.addRigidBody(body)
-
-        bodies.push(body)
-
-
-        this.meshes.push(mesh)
-        this.meshMap.set(mesh, bodies)
-
-        let index = Math.floor(Math.random() * mesh.count)
-        let position = new THREE.Vector3()
-        position.set(0, Math.random() + 1, 0)
-        this.setMeshPosition(mesh, position, index, Ammo)
-    }
-
-    setMeshPosition(mesh, position, index, Ammo) {
-        if (mesh.isInstancedMesh) {
-            const bodies = this.meshMap.get(mesh)
-            const body = bodies[index]
-
-            body.setAngularVelocity(new Ammo.btVector3(0, 0, 0))
-            body.setLinearVelocity(new Ammo.btVector3(0, 0, 0))
-
-            this.tempTransform.setIdentity()
-            this.tempTransform.setOrigin(new Ammo.btVector3(position.x, position.y, position.z))
-            body.setWorldTransform(this.tempTransform)
-        }
-    }
-
-
-    createCar(Ammo = this.ammoClone) {
+    createCar(Ammo = this.ammoClone){
         let pos = {x: 0, y: 0, z: 0},
             quat = {x: 0, y: 0, z: 0, w: 1}
 
@@ -185,6 +86,7 @@ export class Car {
         let chassisHeight = .6;
         let chassisLength = 4;
         let massVehicle = 800;
+
 
 
         let geometry = new Ammo.btBoxShape(new Ammo.btVector3(chassisWidth * .5, chassisHeight * .5, chassisLength * .5));
@@ -205,7 +107,7 @@ export class Car {
 
 
         const shape = new THREE.BoxGeometry(chassisWidth, chassisHeight, chassisLength)
-        const material = new THREE.MeshStandardMaterial({color: 0xffffff, metalness: 1, roughness: 0.3})
+        const material = new  THREE.MeshStandardMaterial({color: 0xffffff, metalness: 1, roughness: 0.3})
         this.chassisMesh = new THREE.Mesh(shape, material)
 
         let that = this;
@@ -222,20 +124,13 @@ export class Car {
                     child.receiveShadow = true;
                 }
             });
-            console.log(car);
-
             that.scene.add(car) //add car to scene
 
             that.chassisMesh = car
         });
-
         this.chassisMesh.castShadow = true
         this.chassisMesh.receiveShadow = true
-
-
         //physics in ammojs
-
-
         this.chassisMesh.userData.physicsBody = Body
         this.rigidBodies.push(this.chassisMesh)
 
@@ -275,18 +170,16 @@ export class Car {
 
 
     }
-
     keyup(e) {
-        if (this.keysActions[e.code]) {
+        if(this.keysActions[e.code]) {
             this.actions[this.keysActions[e.code]] = false;
             e.preventDefault();
             e.stopPropagation();
             return false;
         }
     }
-
     keydown(e) {
-        if (this.keysActions[e.code]) {
+        if(this.keysActions[e.code]) {
             this.actions[this.keysActions[e.code]] = true;
             e.preventDefault();
             e.stopPropagation();
@@ -294,7 +187,7 @@ export class Car {
         }
     }
 
-    updateCarModel() {
+    updateCarModel () {
 
         let speed = this.vehicle.getCurrentSpeedKmHour();
         this.speedometer.innerHTML = (speed < 0 ? '(R) ' : '') + Math.abs(speed).toFixed(1) + ' km/h';
