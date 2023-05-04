@@ -5,10 +5,14 @@ import {GLTFLoader} from 'three/examples/jsm/loaders/GLTFLoader'
 import { DRACOLoader } from 'three/examples/jsm/loaders/DracoLoader'
 
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls'
+import {Controls} from './controls.js'
+import {Detector} from "./Detector.js";
+import Stats from "three/examples/jsm/libs/stats.module.js";
 
 export default class Canvas {
     constructor () {
         this.clock = new THREE.Clock()
+
 
         this.rigidBodies = []
         this.meshes = []
@@ -20,7 +24,7 @@ export default class Canvas {
         this.createLights()
         this.startAmmo()
 
-        this.onResize()
+
 
 
         this.actions = {};
@@ -31,13 +35,27 @@ export default class Canvas {
             "KeyD":'right'
         };
 
+        this.controlsCar = new Controls();
 
-        
-        
+        this.speedometer = document.getElementById('speedometer');
+        this.container = document.getElementById('container');
+
+
         this.controls = new OrbitControls(this.camera, this.renderer.domElement)
         this.controls.update()
+        this.container.innerHTML = "";
+        this.stats = new Stats();
+
+
+        this.stats.domElement.style.top = '0px';
+
+        this.container.appendChild(this.stats.domElement);
 
         this.update()
+
+        document.addEventListener('keyup', this.keyup.bind(this), false);
+        document.addEventListener('keydown', this.keydown.bind(this), false);
+        window.addEventListener('resize', this.onResize.bind(this), false)
     }
 
     createRenderer () {
@@ -102,6 +120,9 @@ export default class Canvas {
 
     startAmmo(){
         Ammo().then( (Ammo) => {
+            if (!Detector.webgl) {
+                Detector.addGetWebGLMessage();
+            }
             Ammo = Ammo
             this.ammoClone = Ammo
             this.createAmmo(Ammo)
@@ -114,8 +135,6 @@ export default class Canvas {
         this.setupPhysicsWorld(Ammo)
         this.createPlane(Ammo)
         this.createCar(Ammo)
-        // this.createBall2(Ammo)
-
     }
 
     setupPhysicsWorld(Ammo = this.ammoClone){
@@ -136,13 +155,18 @@ export default class Canvas {
             mass = 0
 
         //plane in threejs
-        let blockPlane = new THREE.Mesh(new THREE.BoxGeometry(scale.x, scale.y, scale.z), new THREE.MeshStandardMaterial({color: 0xffffff, metalness: 1, roughness: 0.3}))
-        blockPlane.position.set(pos.x, pos.y, pos.z)
+        let shape = new THREE.BoxGeometry(scale.x, scale.y, scale.z)
+        let material = new THREE.MeshPhongMaterial({color: 0x999999,})
+        let blockPlane = new THREE.Mesh(shape, material)
+        blockPlane.position.copy(pos);
+        blockPlane.quaternion.copy(quat);
 
         blockPlane.castShadow = true
         blockPlane.receiveShadow = true
 
         this.scene.add(blockPlane)
+
+        let friction = 2.5;
 
         //physics in ammojs
         let transform = new Ammo.btTransform()
@@ -154,18 +178,19 @@ export default class Canvas {
 
         let localInertia = new Ammo.btVector3(0, 0, 0)
 
-        let shape = new Ammo.btBoxShape(new Ammo.btVector3(scale.x * 0.5, scale.y * 0.5, scale.z * 0.5))
-        shape.setMargin(0.05)
-        shape.calculateLocalInertia(mass, localInertia)
+        let geometry = new Ammo.btBoxShape(new Ammo.btVector3(scale.x * 0.5, scale.y * 0.5, scale.z * 0.5))
+        geometry.setMargin(0.05)
+        geometry.calculateLocalInertia(mass, localInertia)
 
-        let rigidBodyInfo = new Ammo.btRigidBodyConstructionInfo(mass, motionState, shape, localInertia)
+        let rigidBodyInfo = new Ammo.btRigidBodyConstructionInfo(mass, motionState, geometry, localInertia)
         let rBody = new Ammo.btRigidBody(rigidBodyInfo)
+        rBody.setFriction(friction)
+
 
         this.physicsWorld.addRigidBody(rBody)
 
         this.vehicleSteering = 0;
-        this.engineForce = 0;
-        this.breakingForce = 0;
+
     }
 
     addWheel(isFront, pos, radius, width, index, vehicle, Ammo = this.ammoClone) {
@@ -219,11 +244,13 @@ export default class Canvas {
         transform.setIdentity()
         transform.setOrigin(new Ammo.btVector3(pos.x, pos.y, pos.z))
         transform.setRotation(new Ammo.btQuaternion(quat.x, quat.y, quat.z, quat.w))
+
         let motionState = new Ammo.btDefaultMotionState(transform)
         let localInertia = new Ammo.btVector3(0, 0, 0)
         geometry.calculateLocalInertia(massVehicle, localInertia)
         let rigidBodyInfo = new Ammo.btRigidBodyConstructionInfo(massVehicle, motionState, geometry, localInertia)
         let Body = new Ammo.btRigidBody(rigidBodyInfo)
+        Body.setActivationState(4)
 
         this.physicsWorld.addRigidBody(Body)
 
@@ -244,9 +271,6 @@ export default class Canvas {
         this.rigidBodies.push(this.chassisMesh)
 
         // Raycast Vehicle
-
-
-        let breakingForce = 0;
         this.tuning = new Ammo.btVehicleTuning();
         let rayCaster = new Ammo.btDefaultVehicleRaycaster(this.physicsWorld);
         this.vehicle = new Ammo.btRaycastVehicle(this.tuning, Body, rayCaster);
@@ -262,15 +286,24 @@ export default class Canvas {
         this.BACK_LEFT = 2;
         this.BACK_RIGHT = 3;
 
-        this.addWheel(true, new Ammo.btVector3(1, 0.3, 2), 0.4, 0.3, this.FRONT_LEFT, this.vehicle);
-        this.addWheel(true, new Ammo.btVector3(-1, 0.3, 2), 0.4, 0.3, this.FRONT_RIGHT, this.vehicle);
-        this.addWheel(false, new Ammo.btVector3(1, 0.3, -2), 0.4, 0.3, this.BACK_LEFT, this.vehicle);
-        this.addWheel(false, new Ammo.btVector3(-1, 0.3, -2), 0.4, 0.3, this.BACK_RIGHT, this.vehicle);
+        let wheelAxisFrontPosition = 1.3;
+        let wheelHalfTrackFront = 1.1;
+        let wheelAxisHeightFront = .3;
+        let wheelRadiusFront = .35;
+        let wheelWidthFront = .2;
 
 
+        let wheelAxisPositionBack = -1.3;
+        let wheelRadiusBack = .4;
+        let wheelWidthBack = .3;
+        let wheelHalfTrackBack = 1.1;
+        let wheelAxisHeightBack = .3;
 
-        document.addEventListener('keyup', this.keyup.bind(this), false);
-        document.addEventListener('keydown', this.keydown.bind(this), false);
+        this.addWheel(true, new Ammo.btVector3(wheelHalfTrackFront, wheelAxisHeightFront, wheelAxisFrontPosition), wheelRadiusFront, wheelWidthFront, this.FRONT_LEFT, this.vehicle);
+        this.addWheel(true, new Ammo.btVector3(-wheelHalfTrackFront, wheelAxisHeightFront, wheelAxisFrontPosition), wheelRadiusFront, wheelWidthFront, this.FRONT_RIGHT, this.vehicle);
+        this.addWheel(false, new Ammo.btVector3(-wheelHalfTrackBack, wheelAxisHeightBack, wheelAxisPositionBack), wheelRadiusBack, wheelWidthFront, this.BACK_LEFT, this.vehicle);
+        this.addWheel(false, new Ammo.btVector3(wheelHalfTrackBack, wheelAxisHeightBack, wheelAxisPositionBack), wheelRadiusBack, wheelWidthFront, this.BACK_RIGHT, this.vehicle);
+
 
     }
     keyup(e) {
@@ -293,32 +326,32 @@ export default class Canvas {
     updateCarModel (deltaTime, vehicle) {
 
         let speed = vehicle.getCurrentSpeedKmHour();
+        this.speedometer.innerHTML = (speed < 0 ? '(R) ' : '') + Math.abs(speed).toFixed(1) + ' km/h';
+
 
         let steeringIncrement = .04;
         let steeringClamp = .5;
+
+
         let maxEngineForce = 2000;
         let maxBreakingForce = 100;
+        let breakingForce = 0;
+        let engineForce = 0;
 
         if (this.actions.acceleration) {
-            if (speed < -1)
-                this.breakingForce = maxBreakingForce;
-            else this.engineForce = maxEngineForce;
+            engineForce = maxEngineForce;
         }
         if (this.actions.braking) {
-            if (speed > 1)
-                this.breakingForce = maxBreakingForce;
-            else this.engineForce = -maxEngineForce / 2;
+                breakingForce = maxBreakingForce;
         }
         if (this.actions.left) {
             if (this.vehicleSteering < steeringClamp)
                 this.vehicleSteering += steeringIncrement;
-        }
-        else {
+        } else {
             if (this.actions.right) {
                 if (this.vehicleSteering > -steeringClamp)
                     this.vehicleSteering -= steeringIncrement;
-            }
-            else {
+            } else {
                 if (this.vehicleSteering < -steeringIncrement)
                     this.vehicleSteering += steeringIncrement;
                 else {
@@ -330,13 +363,22 @@ export default class Canvas {
                 }
             }
         }
-        vehicle.applyEngineForce(this.engineForce, this.FRONT_LEFT);
-        vehicle.applyEngineForce(this.engineForce, this.FRONT_RIGHT);
-        console.log(this.breakingForce)
-        vehicle.setBrake(this.breakingForce / 2, this.FRONT_LEFT);
-        vehicle.setBrake(this.breakingForce / 2, this.FRONT_RIGHT);
-        vehicle.setBrake(this.breakingForce, this.BACK_LEFT);
-        vehicle.setBrake(this.breakingForce, this.BACK_RIGHT);
+        vehicle.applyEngineForce(engineForce, this.FRONT_LEFT);
+        vehicle.applyEngineForce(engineForce, this.FRONT_RIGHT);
+        if (breakingForce === 0) {
+            vehicle.setBrake(0, this.FRONT_LEFT);
+            vehicle.setBrake(0, this.FRONT_RIGHT);
+            vehicle.setBrake(0, this.BACK_LEFT);
+            vehicle.setBrake(0, this.BACK_RIGHT);
+        } else {
+            vehicle.setBrake(breakingForce / 2, this.FRONT_LEFT);
+            vehicle.setBrake(breakingForce / 2, this.FRONT_RIGHT);
+            vehicle.setBrake(breakingForce, this.BACK_LEFT);
+            vehicle.setBrake(breakingForce, this.BACK_RIGHT);
+        }
+
+        console.log('engineForce', engineForce);
+        console.log('breakingForce', breakingForce);
 
         vehicle.setSteeringValue(this.vehicleSteering, this.FRONT_LEFT);
         vehicle.setSteeringValue(this.vehicleSteering, this.FRONT_RIGHT);
@@ -379,20 +421,7 @@ export default class Canvas {
 
     updatePhysics(delta){
         this.physicsWorld.stepSimulation(delta, 10)
-        for(let i = 0; i < this.rigidBodies.length; i++){
-            let threeObject = this.rigidBodies[i]
-            let ammoObject = threeObject.userData.physicsBody
-            let ms = ammoObject.getMotionState()
 
-            if(ms){
-
-                ms.getWorldTransform(this.tempTransform)
-                let pos = this.tempTransform.getOrigin()
-                let quat = this.tempTransform.getRotation()
-                threeObject.position.set(pos.x(), pos.y(), pos.z())
-                threeObject.quaternion.set(quat.x(), quat.y(), quat.z(), quat.w())
-            }
-        }
     }
 
     update(){
@@ -401,40 +430,9 @@ export default class Canvas {
             this.updatePhysics(this.delta * 2)
             this.updateCarModel(this.delta, this.vehicle)
         }
-
-
-        
+        this.stats.update()
         this.renderer.render(this.scene, this.camera)
         requestAnimationFrame(this.update.bind(this))
     }
 
-    compose( position, quaternion, array, index ) {
-
-        const x = quaternion.x(), y = quaternion.y(), z = quaternion.z(), w = quaternion.w();
-        const x2 = x + x, y2 = y + y, z2 = z + z;
-        const xx = x * x2, xy = x * y2, xz = x * z2;
-        const yy = y * y2, yz = y * z2, zz = z * z2;
-        const wx = w * x2, wy = w * y2, wz = w * z2;
-
-        array[ index + 0 ] = ( 1 - ( yy + zz ) );
-        array[ index + 1 ] = ( xy + wz );
-        array[ index + 2 ] = ( xz - wy );
-        array[ index + 3 ] = 0;
-
-        array[ index + 4 ] = ( xy - wz );
-        array[ index + 5 ] = ( 1 - ( xx + zz ) );
-        array[ index + 6 ] = ( yz + wx );
-        array[ index + 7 ] = 0;
-
-        array[ index + 8 ] = ( xz + wy );
-        array[ index + 9 ] = ( yz - wx );
-        array[ index + 10 ] = ( 1 - ( xx + yy ) );
-        array[ index + 11 ] = 0;
-
-        array[ index + 12 ] = position.x();
-        array[ index + 13 ] = position.y();
-        array[ index + 14 ] = position.z();
-        array[ index + 15 ] = 1;
-
-    }
 }
