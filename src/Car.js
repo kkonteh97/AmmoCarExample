@@ -130,6 +130,8 @@ export class Car {
         });
         this.chassisMesh.castShadow = true
         this.chassisMesh.receiveShadow = true
+        this.scene.add(this.chassisMesh)
+
         //physics in ammojs
         this.chassisMesh.userData.physicsBody = Body
         this.rigidBodies.push(this.chassisMesh)
@@ -188,14 +190,11 @@ export class Car {
     }
 
     updateCarModel () {
-
         let speed = this.vehicle.getCurrentSpeedKmHour();
         this.speedometer.innerHTML = (speed < 0 ? '(R) ' : '') + Math.abs(speed).toFixed(1) + ' km/h';
 
-
         let steeringIncrement = .04;
         let steeringClamp = .5;
-
 
         let maxEngineForce = 2000;
         let maxBreakingForce = 100;
@@ -242,21 +241,24 @@ export class Car {
         this.vehicle.setSteeringValue(this.vehicleSteering, this.FRONT_LEFT);
         this.vehicle.setSteeringValue(this.vehicleSteering, this.FRONT_RIGHT);
 
-        let tm, p, q, i;
+        let tm,
+            p,
+            q,
+            i;
         let n = this.vehicle.getNumWheels();
         for (i = 0; i < n; i++) {
             this.vehicle.updateWheelTransform(i, true);
             tm = this.vehicle.getWheelTransformWS(i);
             p = tm.getOrigin();
             q = tm.getRotation();
-            this.wheelMeshes[i].position.set(p.x(), p.y(), p.z());
+            this.wheelMeshes[i].position.set(p.x()-10, p.y(), p.z());
             this.wheelMeshes[i].quaternion.set(q.x(), q.y(), q.z(), q.w());
         }
 
         tm = this.vehicle.getChassisWorldTransform();
         p = tm.getOrigin();
         q = tm.getRotation();
-        this.chassisMesh.position.set(p.x(), p.y(), p.z());
+        this.chassisMesh.position.set(p.x()-10, p.y(), p.z());
         this.chassisMesh.quaternion.set(q.x(), q.y(), q.z(), q.w());
     }
 

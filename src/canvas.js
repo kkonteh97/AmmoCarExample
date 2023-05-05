@@ -26,16 +26,6 @@ export default class Canvas {
         this.startAmmo()
 
 
-        this.actions = {};
-        this.keysActions = {
-            "KeyW": 'acceleration',
-            "KeyS": 'braking',
-            "KeyA": 'left',
-            "KeyD": 'right'
-        };
-
-        this.controlsCar = new Controls();
-
         this.container = document.getElementById('container');
 
 
@@ -56,8 +46,7 @@ export default class Canvas {
 
     createRenderer() {
         this.renderer = new THREE.WebGLRenderer({
-            alpha: true,
-            antialias: true
+            alpha: true
         })
         this.renderer.setSize(window.innerWidth, window.innerHeight)
         this.renderer.setPixelRatio(window.devicePixelRatio || 1)
@@ -107,19 +96,15 @@ export default class Canvas {
         dirLight.shadow.camera.far = 20000
 
 
-        const textureEquirec = new THREE.TextureLoader().load('/static/assets/models/sky.jpg')
-        textureEquirec.mapping = THREE.EquirectangularReflectionMapping
-        textureEquirec.encoding = THREE.sRGBEncoding
-        this.scene.environment = textureEquirec
-        this.scene.background = textureEquirec
+        this.scene.add(dirLight)
     }
 
     startAmmo() {
         Ammo().then((Ammo) => {
             if (!Detector.webgl) {
                 Detector.addGetWebGLMessage();
+                document.getElementById('container').innerHTML = "";
             }
-            Ammo = Ammo
             this.ammoClone = Ammo
             this.createAmmo(Ammo)
         })
@@ -148,33 +133,30 @@ export default class Canvas {
 
     createGLTF(Ammo = this.ammoClone){
         let pos = {x: 0, y: 4, z: 1},
-            quat = {x: 0, y: 0, z: 0, w: 1},
-            mass = 1
-
+            quat = {x: 0, y: 0, z: 0, w: 1}
         this.loader = new GLTFLoader()
         const dracoLoader = new DRACOLoader()
         dracoLoader.setDecoderPath('/static/draco/')
         this.loader.setDRACOLoader(dracoLoader)
-        this.loader.load('/static/assets/models/suz.glb', (gltf) => {
-            const geometry = gltf.scene.children[0].geometry
-            const material = gltf.scene.children[0].material
-            this.createInstances(geometry, material, Ammo)
-
-
+        this.loader.load('/static/assets/models/untitled3.glb', (gltf) => {
+            const geometry = gltf.scene.children[3].geometry
+            const geometry2 = gltf.scene.children[2].geometry
+            geometry.scale(2, 2, 2)
+            geometry2.scale(2, 2, 2)
+            const material = gltf.scene.children[3].material
+            this.createInstances(geometry, material, Ammo, pos, quat)
+            this.createInstances(geometry2, material, Ammo, pos, quat)
         })
     }
 
-    createInstances(geometry, material, Ammo){
-        const matrix = new THREE.Matrix4()
-        const count = 10
+    createInstances(geometry, material, Ammo, pos, quat){
+        const count = 1
         const mesh = new THREE.InstancedMesh(geometry, material, count)
 
-        for(let i = 0; i < count; i++){
-            this.randomizeMatrix(matrix)
-            mesh.setMatrixAt( i, matrix )
-            mesh.castShadow = true
 
-        }
+        mesh.castShadow = true
+
+        mesh.position.set(0, 0, 0)
 
         this.scene.add(mesh)
 
@@ -220,87 +202,38 @@ export default class Canvas {
 
         geometry.verticesNeedUpdate = true
 
-        this.handleInstancedMesh(mesh, shape, 1, Ammo)
-    }
-
-    handleInstancedMesh(mesh, shape, mass, Ammo){
-        const array = mesh.instanceMatrix.array
+        const mass = 0
 
         const bodies = []
 
-        for(let i = 0; i < mesh.count; i++){
-            const index = i * 16
+        let transform = new Ammo.btTransform()
+        transform.setIdentity()
+        transform.setOrigin(new Ammo.btVector3(15, 1, 0))
+        transform.setRotation(new Ammo.btQuaternion(quat.x, quat.y, quat.z, quat.w))
 
-            const transform = new Ammo.btTransform()
-            transform.setFromOpenGLMatrix( array.slice( index, index + 16 ) )
+        const motionState = new Ammo.btDefaultMotionState( transform )
 
-            const motionState = new Ammo.btDefaultMotionState( transform )
+        const localInertia = new Ammo.btVector3( 0, 0, 0 )
+        shape.calculateLocalInertia(mass, localInertia)
 
-            const localInertia = new Ammo.btVector3( 0, 0, 0 )
-            shape.calculateLocalInertia(mass, localInertia)
+        const rbInfo = new Ammo.btRigidBodyConstructionInfo( mass, motionState, shape, localInertia )
+        const body = new Ammo.btRigidBody( rbInfo )
+        this.physicsWorld.addRigidBody( body )
+        this.rigidBodies.push( body )
 
-            const rbInfo = new Ammo.btRigidBodyConstructionInfo( mass, motionState, shape, localInertia )
-            const body = new Ammo.btRigidBody( rbInfo )
-            this.physicsWorld.addRigidBody( body )
-
-            bodies.push( body )
-        }
+        bodies.push( body )
 
         this.meshes.push(mesh)
         this.meshMap.set(mesh, bodies)
 
-        let index = Math.floor(Math.random() * mesh.count)
-        let position = new THREE.Vector3()
-        position.set(0, Math.random() + 1, 0)
-        this.setMeshPosition(mesh, position, index, Ammo)
+        body.setWorldTransform( transform )
+
     }
-
-    setMeshPosition(mesh, position, index, Ammo) {
-        if(mesh.isInstancedMesh){
-            const bodies = this.meshMap.get(mesh)
-            const body = bodies[index]
-
-            body.setAngularVelocity( new Ammo.btVector3(0, 0, 0))
-            body.setLinearVelocity( new Ammo.btVector3(0, 0, 0))
-
-            this.tempTransform.setIdentity()
-            this.tempTransform.setOrigin(new Ammo.btVector3(position.x, position.y, position.z))
-            body.setWorldTransform( this.tempTransform)
-        }
-    }
-
-    randomizeMatrix = function () {
-
-        const position = new THREE.Vector3()
-        const rotation = new THREE.Euler()
-        const quaternion = new THREE.Quaternion()
-        const scale = new THREE.Vector3()
-
-        return function ( matrix ) {
-
-            position.x = Math.random() * 10 - 5
-            position.y = 10 + Math.random() * 20
-            position.z = Math.random() * 10 - 5
-
-            rotation.x = Math.random() * 2 * Math.PI
-            rotation.y = Math.random() * 2 * Math.PI
-            rotation.z = Math.random() * 2 * Math.PI
-
-            quaternion.setFromEuler( rotation )
-
-            scale.x = scale.y = scale.z = 1
-
-            matrix.compose( position, quaternion, scale )
-
-        };
-
-    }();
-
 
 
     createPlane(Ammo = this.ammoClone) {
         let pos = {x: 0, y: 0, z: 0},
-            scale = {x: 50, y: 1, z: 50},
+            scale = {x: 500, y: 1, z: 500},
             quat = {x: 0, y: 0, z: 0, w: 1},
             mass = 0
 
